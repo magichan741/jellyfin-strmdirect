@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <title>StrmDirect 设置</title>
+    <style>
+        body { font-family: "Microsoft YaHei", sans-serif; padding: 16px; max-width: 760px; }
+        h3 { border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+        .row { margin: 10px 0; display: flex; align-items: center; }
+        .row label { width: 200px; flex-shrink: 0; }
+        .row input[type="text"] { flex: 1; padding: 5px; }
+        .row input[type="number"] { flex: 1; padding: 5px; max-width: 160px; }
+        .row input[type="checkbox"] { width: 20px; height: 20px; }
+        .hint { color: #888; font-size: 12px; margin-left: 200px; }
+        .section { background: #f5f5f5; padding: 12px; margin: 12px 0; border-radius: 6px; }
+        .btn { padding: 8px 24px; cursor: pointer; }
+        .msg { margin: 8px 0; color: #0a7; font-weight: bold; }
+        .err { color: #c00; }
+    </style>
+</head>
+<body>
+    <h3>StrmDirect 移动 CDN 秒播插件</h3>
+    <div class="section">
+        插件监听一个端口（默认 8098），手机 app 连接该端口即可：
+        strm 影片清单返 200、分片 302 直连移动 CDN 秒播；浏览 / 刮削 / 详情 / 控制
+        透明转发 Jellyfin；普通影片走原生流程。strm 文件内容不会被改写。
+    </div>
+
+    <div class="row">
+        <label>启用插件（总开关）</label>
+        <input type="checkbox" id="Enabled" />
+    </div>
+    <div class="row">
+        <label>代理监听端口</label>
+        <input type="number" id="ListenPort" min="1" max="65535" />
+    </div>
+    <div class="row">
+        <label>Jellyfin 地址</label>
+        <input type="text" id="JfUrl" />
+    </div>
+    <div class="row">
+        <label>API Token</label>
+        <input type="text" id="Token" />
+        <div class="hint">Jellyfin 设置 → 高级 → API 密钥</div>
+    </div>
+    <div class="row">
+        <label>用户 ID</label>
+        <input type="text" id="UserId" />
+    </div>
+    <div class="row">
+        <label>CDN 标识</label>
+        <input type="text" id="CdnMarker" />
+        <div class="hint">strm 内地址匹配该关键字才走直连通道（默认 chinamobile）</div>
+    </div>
+    <div class="row">
+        <label>探测劫持</label>
+        <input type="checkbox" id="ProbeHijack" />
+        <div class="hint">ffprobe 探测返回假清单，避免服务端探测拖慢进播放页</div>
+    </div>
+    <div class="row">
+        <label>图片缓存</label>
+        <input type="checkbox" id="ImageCache" />
+    </div>
+    <div class="row">
+        <label>备份映射文件</label>
+        <input type="text" id="BackupJsonPath" />
+        <div class="hint">strm 内容为历史反代地址时回退此文件拿原 CDN 地址</div>
+    </div>
+    <div class="row">
+        <label>假分片文件</label>
+        <input type="text" id="DummyTsPath" />
+    </div>
+    <div class="row">
+        <label>反代前缀（循环防护）</label>
+        <input type="text" id="ProxyPrefix" />
+    </div>
+
+    <div class="msg" id="msg"></div>
+    <button class="btn" onclick="save()">保存</button>
+    <button class="btn" onclick="load()">重新载入</button>
+
+    <script>
+        var PLUGIN_ID = '9e2a7c416b8f4d3e9a1c2f5b8d7e4a60';
+        var api = (window.parent && window.parent.ApiClient) || window.ApiClient;
+
+        function setVal(id, v) {
+            var el = document.getElementById(id);
+            if (el.type === 'checkbox') { el.checked = !!v; }
+            else { el.value = (v === null || v === undefined) ? '' : v; }
+        }
+
+        function getVal(id) {
+            var el = document.getElementById(id);
+            if (el.type === 'checkbox') { return el.checked; }
+            if (el.type === 'number') { var n = parseInt(el.value, 10); return isNaN(n) ? 0 : n; }
+            return el.value;
+        }
+
+        function showMsg(text, isErr) {
+            var m = document.getElementById('msg');
+            m.textContent = text;
+            m.className = isErr ? 'msg err' : 'msg';
+        }
+
+        function load() {
+            if (!api) { showMsg('无法访问 ApiClient，请通过 Jellyfin 插件页面打开本设置页', true); return; }
+            api.getPluginConfiguration(PLUGIN_ID).then(function (cfg) {
+                if (!cfg) { showMsg('未读取到配置（可能尚未保存过）', true); return; }
+                setVal('Enabled', cfg.Enabled);
+                setVal('ListenPort', cfg.ListenPort);
+                setVal('JfUrl', cfg.JfUrl);
+                setVal('Token', cfg.Token);
+                setVal('UserId', cfg.UserId);
+                setVal('CdnMarker', cfg.CdnMarker);
+                setVal('ProbeHijack', cfg.ProbeHijack);
+                setVal('ImageCache', cfg.ImageCache);
+                setVal('BackupJsonPath', cfg.BackupJsonPath);
+                setVal('DummyTsPath', cfg.DummyTsPath);
+                setVal('ProxyPrefix', cfg.ProxyPrefix);
+                showMsg('配置已载入');
+            }).catch(function (e) { showMsg('载入失败: ' + e, true); });
+        }
+
+        function save() {
+            if (!api) { showMsg('无法访问 ApiClient', true); return; }
+            var cfg = {
+                Enabled: getVal('Enabled'),
+                ListenPort: getVal('ListenPort'),
+                JfUrl: getVal('JfUrl'),
+                Token: getVal('Token'),
+                UserId: getVal('UserId'),
+                CdnMarker: getVal('CdnMarker'),
+                ProbeHijack: getVal('ProbeHijack'),
+                ImageCache: getVal('ImageCache'),
+                BackupJsonPath: getVal('BackupJsonPath'),
+                DummyTsPath: getVal('DummyTsPath'),
+                ProxyPrefix: getVal('ProxyPrefix')
+            };
+            api.updatePluginConfiguration(PLUGIN_ID, cfg).then(function () {
+                showMsg('已保存，重启 Jellyfin 后生效');
+            }).catch(function (e) { showMsg('保存失败: ' + e, true); });
+        }
+
+        load();
+    </script>
+</body>
+</html>
