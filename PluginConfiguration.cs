@@ -50,12 +50,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>
     /// strm 原值备份映射（strm 内容被改写为反代前缀时回退查原 CDN URL）。
     /// </summary>
-    public string BackupJsonPath { get; set; } = @"E:\桌面\strm302\strm_backup.json";
+    public string BackupJsonPath { get; set; } = @"./strm_backup.json";
 
     /// <summary>
     /// 探测假分片文件（本地 ts，供 ffprobe 秒解析）。
     /// </summary>
-    public string DummyTsPath { get; set; } = @"E:\桌面\strm302\probe_dummy.ts";
+    public string DummyTsPath { get; set; } = @"./probe_dummy.ts";
 
     /// <summary>
     /// 反代前缀（strm 内容若以此开头视为已被改写，回退备份映射）。
