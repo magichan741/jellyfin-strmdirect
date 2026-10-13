@@ -206,6 +206,14 @@ public sealed class ProxyServer : IDisposable
                     }
 
                     var (method, rawTarget, version, headers) = ParseHead(headBytes);
+
+                    // CONNECT：HTTPS 隧道（TMDb/插件仓库等 https 外联经 8098 透明转发）
+                    if (string.Equals(method, "CONNECT", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await HandleConnectAsync(stream, rawTarget);
+                        return;
+                    }
+
                     var body = await ReadBodyAsync(reader, headers);
 
                     var handled = await RouteAsync(stream, method, rawTarget, version, headers, body);
@@ -225,6 +233,66 @@ public sealed class ProxyServer : IDisposable
             {
                 _logger.LogDebug(ex, "[StrmDirect] 连接处理异常");
             }
+        }
+    }
+
+    /// <summary>
+    /// CONNECT 隧道：与目标 host:port 建立 TCP，返回 200 Connection Established，双向转发字节流。
+    /// 用于 Jellyfin 进程内 http_proxy 注入下的 https 外联（TMDb/插件仓库/更新检查等）。
+    /// </summary>
+    private async Task HandleConnectAsync(Stream clientStream, string target)
+    {
+        var host = target;
+        var port = 443;
+        var idx = target.LastIndexOf(':');
+        if (idx > 0)
+        {
+            host = target.Substring(0, idx);
+            if (int.TryParse(target.Substring(idx + 1), out var p) && p > 0)
+            {
+                port = p;
+            }
+        }
+
+        using var upstream = new TcpClient();
+        await upstream.ConnectAsync(host, port).ConfigureAwait(false);
+        upstream.NoDelay = true;
+        var upStream = upstream.GetStream();
+
+        var ok = Encoding.ASCII.GetBytes("HTTP/1.1 200 Connection Established\r\n\r\n");
+        await clientStream.WriteAsync(ok.AsMemory(0, ok.Length)).ConfigureAwait(false);
+        await clientStream.FlushAsync().ConfigureAwait(false);
+
+        using var _ = _cts!.Token.Register(() => { try { upstream.Close(); } catch { } });
+        var t1 = Task.Run(() => PumpAsync(clientStream, upStream));
+        var t2 = Task.Run(() => PumpAsync(upStream, clientStream));
+        await Task.WhenAny(t1, t2).ConfigureAwait(false);
+    }
+
+    private static async Task PumpAsync(Stream src, Stream dst)
+    {
+        try
+        {
+            var buf = new byte[16384];
+            while (true)
+            {
+                var n = await src.ReadAsync(buf.AsMemory(0, buf.Length)).ConfigureAwait(false);
+                if (n <= 0)
+                {
+                    break;
+                }
+
+                await dst.WriteAsync(buf.AsMemory(0, n)).ConfigureAwait(false);
+                await dst.FlushAsync().ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // 任一端断开即结束隧道
+        }
+        finally
+        {
+            try { dst.Close(); } catch { }
         }
     }
 
@@ -379,7 +447,7 @@ public sealed class ProxyServer : IDisposable
         byte[] body)
     {
         // ===== 探测劫持（必须在 URI 解析之前）：Jellyfin 的 ffprobe 经 http_proxy 走本端口探测时，
-        // 请求行是代理绝对 URL（如 GET http://cdn.example.com/.../index.m3u8），无法用 stash 拼接解析。
+        // 请求行是代理绝对 URL（如 GET http://your-cdn.example.com.../index.m3u8），无法用 stash 拼接解析。
         // 对 Lavf/ffprobe/ffmpeg UA 一律返回本地假 HLS（秒回），避免服务端探测拖慢 PlaybackInfo。
         var ua = headers.TryGetValue("User-Agent", out var uav) ? uav : string.Empty;
         var uaL = ua.ToLower(CultureInfo.InvariantCulture);
