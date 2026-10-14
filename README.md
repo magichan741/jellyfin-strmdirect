@@ -22,6 +22,19 @@
 - **HTTPS 隧道（CONNECT）**：若按下方「可选：启用服务端探测劫持」注入了 `http_proxy` 环境变量，Jellyfin 进程自身的 HTTPS 外联（TMDb/OMDb 刮削、插件仓库 manifest、更新检查）也会经本端口——插件对 `CONNECT` 请求做透明 TCP 隧道转发，任意 HTTPS 域名照常可达，不依赖域名白名单。
 - 循环防护：strm 内容若以反代前缀开头（历史遗留改写），回退备份映射文件拿原 CDN 地址。
 
+## 通过仓库安装（推荐）
+
+1. Jellyfin → 控制台 → 高级 → 存储库 → 添加存储库：
+
+   ```
+   https://raw.githubusercontent.com/magichan741/jellyfin-strmdirect/main/manifest.json
+   ```
+
+2. 控制台 → 插件 → 目录 → 搜索 **StrmDirect** → 安装。
+3. 重启 Jellyfin，插件随服务器自动监听 8098。
+
+仓库发布：<https://github.com/magichan741/jellyfin-strmdirect/releases/tag/v1.0.0>（安装包 `jellyfin-strmdirect_1.0.0.0.zip`）
+
 ## 安装
 
 1. 编译（需 .NET SDK 10+）：
